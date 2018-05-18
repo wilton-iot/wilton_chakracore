@@ -292,6 +292,7 @@ class chakracore_engine::impl : public sl::pimpl::object::impl {
 public:
     ~impl() STATICLIB_NOEXCEPT {
         if (nullptr != runtime) {
+            JsSetCurrentContext(JS_INVALID_REFERENCE);
             JsDisableRuntimeExecution(runtime);
             JsDisposeRuntime(runtime);
         }
@@ -299,7 +300,7 @@ public:
     
     impl(sl::io::span<const char> init_code) {
         wilton::support::log_info("wilton.engine.chakracore.init", "Initializing engine instance ...");
-        auto err_runtime = JsCreateRuntime(JsRuntimeAttributeDisableBackgroundWork, nullptr, std::addressof(this->runtime));
+        auto err_runtime = JsCreateRuntime(JsRuntimeAttributeNone, nullptr, std::addressof(this->runtime));
         if (JsNoError != err_runtime) throw support::exception(TRACEMSG(
                 "'JsCreateRuntime' error, code: [" + sl::support::to_string(err_runtime) + "]"));
         JsContextRef ctx = JS_INVALID_REFERENCE;
