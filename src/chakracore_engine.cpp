@@ -42,10 +42,38 @@
 #include "wilton/support/exception.hpp"
 #include "wilton/support/logging.hpp"
 
+#include "chakracore_config.hpp"
+
 namespace wilton {
 namespace chakracore {
 
 namespace { // anonymous
+
+chakracore_config get_config() {
+    char* conf = nullptr;
+    int conf_len = 0;
+    auto err = wilton_config(std::addressof(conf), std::addressof(conf_len));
+    if (nullptr != err) support::throw_wilton_error(err, TRACEMSG(err));
+    auto deferred = sl::support::defer([conf] () STATICLIB_NOEXCEPT {
+        wilton_free(conf);
+    });
+    auto json = sl::json::load({const_cast<const char*>(conf), conf_len});
+    return chakracore_config(json["environmentVariables"]);
+}
+
+JsRuntimeAttributes create_attributes(chakracore_config& cfg) {
+    auto res = JsRuntimeAttributeNone;
+    if (cfg.disable_background_work) {
+        res = static_cast<JsRuntimeAttributes> (res | JsRuntimeAttributeDisableBackgroundWork);
+    }
+    if (cfg.disable_native_code_generation) {
+        res = static_cast<JsRuntimeAttributes> (res | JsRuntimeAttributeDisableNativeCodeGeneration);
+    }
+    if (cfg.disable_fatal_on_oom) {
+        res = static_cast<JsRuntimeAttributes> (res | JsRuntimeAttributeDisableFatalOnOOM);
+    }
+    return res;
+}
 
 void register_c_func(const std::string& name, JsNativeFunction cb) {
     JsValueRef global = JS_INVALID_REFERENCE;
@@ -297,10 +325,18 @@ public:
     }
     
     impl(sl::io::span<const char> init_code) {
-        wilton::support::log_info("wilton.engine.chakracore.init", "Initializing engine instance ...");
-        auto err_runtime = JsCreateRuntime(JsRuntimeAttributeNone, nullptr, std::addressof(this->runtime));
+        auto cfg = get_config();
+        wilton::support::log_info("wilton.engine.chakracore.init", std::string() + "Initializing engine instance," +
+                " config: [" + cfg.to_json().dumps() + "]");
+        auto attrs = create_attributes(cfg);
+        auto err_runtime = JsCreateRuntime(attrs, nullptr, std::addressof(this->runtime));
         if (JsNoError != err_runtime) throw support::exception(TRACEMSG(
                 "'JsCreateRuntime' error, code: [" + sl::support::to_string(err_runtime) + "]"));
+        if (cfg.runtime_memory_limit > 0) {
+            auto err_limit = JsSetRuntimeMemoryLimit(runtime, static_cast<size_t>(cfg.runtime_memory_limit));
+            if (JsNoError != err_limit) throw support::exception(TRACEMSG(
+                    "'JsSetRuntimeMemoryLimit' error, code: [" + sl::support::to_string(err_limit) + "]"));
+        }
         JsContextRef ctx = JS_INVALID_REFERENCE;
         auto err_ctx = JsCreateContext(runtime, std::addressof(ctx));
         if (JsNoError != err_runtime) throw support::exception(TRACEMSG(
