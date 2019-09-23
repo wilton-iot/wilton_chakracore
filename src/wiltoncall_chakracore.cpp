@@ -20,6 +20,8 @@
  *
  * Created on May 12, 2018, 2:10 PM
  */
+
+#include <cstdio>
 #include <memory>
 #include <string>
 
@@ -65,6 +67,8 @@ void clean_tls(void*, const char* thread_id, int thread_id_len) {
 
 extern "C" char* wilton_module_init() {
     try {
+        puts("WARN: Available version of ChakraCore JS engine (v1.8.4) is outdated,"
+                " consider using JavaScriptCore engine instead");
         wilton::chakracore::shared_tlmap();
         auto err = wilton_register_tls_cleaner(nullptr, wilton::chakracore::clean_tls);
         if (nullptr != err) wilton::support::throw_wilton_error(err, TRACEMSG(err));
